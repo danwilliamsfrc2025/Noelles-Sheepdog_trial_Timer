@@ -403,9 +403,72 @@
     }
 
     #install-banner.show { display: block; }
+
+    /* ── Audio Unlock Overlay ────────────────────────────────────────────── */
+    #audio-unlock {
+      position: fixed;
+      inset: 0;
+      background: rgba(13,17,23,0.97);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 30px;
+    }
+
+    #audio-unlock.hidden { display: none; }
+
+    #audio-unlock .paw {
+      font-size: 64px;
+      animation: pulse 1.5s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.12); }
+    }
+
+    #audio-unlock h2 {
+      color: var(--amber);
+      font-size: 18px;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    #audio-unlock p {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    #audio-unlock button {
+      background: var(--amber);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 16px 40px;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      margin-top: 10px;
+      -webkit-tap-highlight-color: transparent;
+    }
   </style>
 </head>
 <body>
+
+<!-- Audio unlock overlay — required by iOS Safari -->
+<div id="audio-unlock">
+  <div class="paw">🐾</div>
+  <h2>NOELLE'S TRIAL TIMER</h2>
+  <p>Tap below to enable audio beep notifications.<br/>Required by iPhone for sound to work.</p>
+  <button onclick="unlockAudio()">🔔 TAP TO ENABLE SOUND</button>
+</div>
 
 <!-- Install hint for Safari -->
 <div id="install-banner">
@@ -552,11 +615,37 @@ function saveSettings(s) {
 let settings = loadSettings();
 
 // ── Audio (Web Audio API — works offline, no files needed) ────────────────────
+let audioUnlocked = false;
+
+function unlockAudio() {
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Play a silent buffer — this is the iOS unlock trick
+    const buf    = audioCtx.createBuffer(1, 1, 22050);
+    const source = audioCtx.createBufferSource();
+    source.buffer = buf;
+    source.connect(audioCtx.destination);
+    source.start(0);
+
+    audioCtx.resume().then(() => {
+      audioUnlocked = true;
+      document.getElementById('audio-unlock').classList.add('hidden');
+      // Play a real beep to confirm it works
+      setTimeout(() => playBeep(880, 200), 100);
+      showToast('🔔 Audio enabled!');
+    });
+  } catch(e) {
+    console.log('Audio unlock error:', e);
+    document.getElementById('audio-unlock').classList.add('hidden');
+  }
+}
+
 function getAudioCtx() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  // Resume if suspended (iOS requires user gesture first)
   if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
@@ -601,7 +690,6 @@ async function playAlarm() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function testBeep() {
-  getAudioCtx(); // unlock audio
   playBeep(880, 150);
   showToast('🔔 Beep!');
 }
@@ -615,9 +703,6 @@ function readInput() {
 }
 
 function timerStart() {
-  // Unlock audio on first user gesture
-  getAudioCtx();
-
   if (paused) {
     paused = false;
     running = true;
