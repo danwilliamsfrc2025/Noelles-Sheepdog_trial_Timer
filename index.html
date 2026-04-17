@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Trial Timer"/>
+  <meta name="theme-color" content="#f0a500"/>
+  <link rel="manifest" href="manifest.json"/>
+  <title>Noelle's Sheepdog Trial Timer</title>
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --panel:     #161b22;
+      --border:    #21262d;
+      --amber:     #f0a500;
+      --amber-dim: #7a5200;
+      --amber-glow:rgba(240,165,0,0.15);
+      --green:     #3fb950;
+      --red:       #f85149;
+      --blue:      #58a6ff;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --safe-top:  env(safe-area-inset-top, 0px);
+      --safe-bot:  env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      -webkit-text-size-adjust: 100%;
+      overscroll-behavior: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bot);
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--amber-dim);
+      padding: 10px 16px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: clamp(11px, 3vw, 14px);
+      color: var(--amber);
+      letter-spacing: 0.05em;
+      line-height: 1.3;
+    }
+
+    /* ── Main Layout ─────────────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px 14px;
+      overflow-y: auto;
+    }
+
+    /* ── Clock Display ───────────────────────────────────────────────────── */
+    .clock-box {
+      background: var(--panel);
+      border: 2px solid var(--amber-dim);
+      border-radius: 8px;
+      padding: 16px 10px 10px;
+      text-align: center;
+      position: relative;
+    }
+
+    .clock-box.running { border-color: var(--amber); box-shadow: 0 0 20px var(--amber-glow); }
+    .clock-box.paused  { border-color: var(--blue); }
+    .clock-box.done    { border-color: var(--green); box-shadow: 0 0 20px rgba(63,185,80,0.2); }
+
+    #clock {
+      font-size: clamp(52px, 16vw, 80px);
+      font-weight: bold;
+      color: var(--amber);
+      letter-spacing: 0.04em;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    #clock.paused { color: var(--blue); }
+    #clock.done   { color: var(--green); }
+    #clock.flash  { animation: flash 0.4s ease infinite alternate; }
+    @keyframes flash { from { opacity: 1; } to { opacity: 0.1; } }
+
+    #status {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+    }
+
+    /* ── Progress Bar ────────────────────────────────────────────────────── */
+    .progress-wrap {
+      background: var(--border);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      width: 100%;
+      background: var(--amber);
+      border-radius: 4px;
+      transform-origin: left;
+      transition: transform 0.9s linear;
+    }
+
+    /* ── Time Input ──────────────────────────────────────────────────────── */
+    .time-input {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .spin-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .spin-label {
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+
+    .spin-ctrl {
+      display: flex;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .spin-val {
+      font-size: clamp(28px, 8vw, 40px);
+      font-weight: bold;
+      color: var(--text);
+      width: clamp(64px, 18vw, 90px);
+      text-align: center;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 4px 0;
+      font-family: 'Courier New', monospace;
+      -webkit-appearance: none;
+    }
+
+    /* hide number input spinners */
+    .spin-val::-webkit-inner-spin-button,
+    .spin-val::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    .spin-arrows {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .spin-arrows button {
+      background: var(--border);
+      border: none;
+      color: var(--text);
+      font-size: 14px;
+      width: 30px;
+      height: 26px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .spin-arrows button:active { background: var(--amber-dim); }
+
+    .colon {
+      font-size: clamp(28px, 8vw, 40px);
+      font-weight: bold;
+      color: var(--amber-dim);
+      line-height: 1;
+      padding-bottom: 2px;
+    }
+
+    /* ── Control Buttons ─────────────────────────────────────────────────── */
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: clamp(11px, 3.2vw, 14px);
+      font-weight: bold;
+      padding: 12px 6px;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn:active { transform: scale(0.96); opacity: 0.85; }
+    .btn:disabled { opacity: 0.35; pointer-events: none; }
+
+    .btn-start  { background: var(--green); color: #0d1117; }
+    .btn-pause  { background: var(--blue);  color: #0d1117; }
+    .btn-reset  { background: var(--red);   color: #fff; }
+
+    /* ── Favorites ───────────────────────────────────────────────────────── */
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .section-title {
+      font-size: 10px;
+      color: var(--amber);
+      letter-spacing: 0.15em;
+      margin-bottom: 8px;
+    }
+
+    .fav-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .fav-chip {
+      background: var(--border);
+      color: var(--amber);
+      border: 1px solid var(--amber-dim);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .fav-chip:active { background: var(--amber-dim); }
+
+    .fav-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-sm {
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn-sm:active { background: var(--muted); }
+
+    /* ── Settings ────────────────────────────────────────────────────────── */
+    .settings-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Modal ───────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      width: 100%;
+      max-width: 360px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal h2 {
+      font-size: 13px;
+      color: var(--amber);
+      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    .interval-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .interval-row input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      padding: 6px 4px;
+      text-align: center;
+      width: 100%;
+      outline: none;
+    }
+
+    .interval-row input:focus { border-color: var(--amber); }
+
+    .interval-headers {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .interval-headers span {
+      font-size: 9px;
+      color: var(--muted);
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    .modal-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      justify-content: flex-end;
+    }
+
+    /* ── Notification Toast ──────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: calc(20px + var(--safe-bot));
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--amber);
+      color: var(--bg);
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      font-weight: bold;
+      padding: 10px 20px;
+      border-radius: 20px;
+      transition: transform 0.3s ease;
+      z-index: 200;
+      white-space: nowrap;
+    }
+
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Install Banner ──────────────────────────────────────────────────── */
+    #install-banner {
+      background: var(--amber-dim);
+      color: var(--amber);
+      font-size: 11px;
+      text-align: center;
+      padding: 8px 14px;
+      line-height: 1.4;
+      display: none;
+    }
+
+    #install-banner.show { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- Install hint for Safari -->
+<div id="install-banner">
+  📲 Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> for offline use
+</div>
+
+<header>
+  <h1>🐾 Noelle's Custom Sheepdog Trial Countdown Timer 🐾</h1>
+</header>
+
+<main>
+
+  <!-- Clock -->
+  <div class="clock-box" id="clock-box">
+    <div id="clock">00:00:00</div>
+    <div id="status">READY</div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap">
+    <div id="progress-bar"></div>
+  </div>
+
+  <!-- Time Input -->
+  <div class="time-input">
+    <div class="spin-group">
+      <span class="spin-label">HH</span>
+      <div class="spin-ctrl">
+        <input class="spin-val" id="inp-h" type="number" min="0" max="23" value="0"/>
+        <div class="spin-arrows">
+          <button onclick="nudge('h',1)">▲</button>
+          <button onclick="nudge('h',-1)">▼</button>
+        </div>
+      </div>
+    </div>
+    <span class="colon">:</span>
+    <div class="spin-group">
+      <span class="spin-label">MM</span>
+      <div class="spin-ctrl">
+        <input class="spin-val" id="inp-m" type="number" min="0" max="59" value="15"/>
+        <div class="spin-arrows">
+          <button onclick="nudge('m',1)">▲</button>
+          <button onclick="nudge('m',-1)">▼</button>
+        </div>
+      </div>
+    </div>
+    <span class="colon">:</span>
+    <div class="spin-group">
+      <span class="spin-label">SS</span>
+      <div class="spin-ctrl">
+        <input class="spin-val" id="inp-s" type="number" min="0" max="59" value="0"/>
+        <div class="spin-arrows">
+          <button onclick="nudge('s',1)">▲</button>
+          <button onclick="nudge('s',-1)">▼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Control Buttons -->
+  <div class="btn-row">
+    <button class="btn btn-start" id="btn-start" onclick="timerStart()">▶ START</button>
+    <button class="btn btn-pause" id="btn-pause" onclick="timerPause()" disabled>⏸ PAUSE</button>
+    <button class="btn btn-reset" id="btn-reset" onclick="timerReset()">↺ RESET</button>
+  </div>
+
+  <!-- Favorites -->
+  <div class="section">
+    <div class="section-title">★ FAVORITES</div>
+    <div class="fav-chips" id="fav-chips"></div>
+    <div class="fav-actions">
+      <button class="btn-sm" onclick="favAdd()">+ Add current</button>
+      <button class="btn-sm" onclick="favRemove()">✕ Remove</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="section">
+    <div class="section-title">⚙ SETTINGS</div>
+    <div class="settings-row">
+      <button class="btn-sm" onclick="openIntervals()">📋 Edit Intervals</button>
+      <button class="btn-sm" onclick="testBeep()">🔔 Test Beep</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- Interval Editor Modal -->
+<div class="modal-overlay" id="modal-intervals">
+  <div class="modal">
+    <h2>NOTIFICATION INTERVALS</h2>
+    <div class="interval-headers">
+      <span>Secs Left</span><span># Beeps</span><span>Repeat</span><span>Gap (s)</span>
+    </div>
+    <div id="interval-rows"></div>
+    <div style="margin-top:10px">
+      <button class="btn-sm" onclick="intervalAddRow()">+ Add Row</button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-sm" onclick="closeIntervals()">✕ Cancel</button>
+      <button class="btn-sm" style="background:var(--green);color:#000" onclick="saveIntervals()">✓ Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let totalSeconds  = 0;
+let remaining     = 0;
+let running       = false;
+let paused        = false;
+let tickInterval  = null;
+let triggered     = new Set();
+let audioCtx      = null;
+
+// ── Settings (persisted to localStorage) ─────────────────────────────────────
+const DEFAULTS = {
+  favorites: [300, 600, 900, 1200, 1800],
+  intervals: [
+    { seconds_left: 180, beeps: 3, repeat: 3,  gap: 2.0 },
+    { seconds_left: 120, beeps: 2, repeat: 3,  gap: 2.0 },
+    { seconds_left: 60,  beeps: 1, repeat: 3,  gap: 2.0 },
+    { seconds_left: 10,  beeps: 1, repeat: 10, gap: 1.0 },
+  ]
+};
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('noelle_settings') || '{}');
+    return {
+      favorites: s.favorites || DEFAULTS.favorites,
+      intervals: s.intervals || DEFAULTS.intervals,
+    };
+  } catch { return { ...DEFAULTS }; }
+}
+
+function saveSettings(s) {
+  localStorage.setItem('noelle_settings', JSON.stringify(s));
+}
+
+let settings = loadSettings();
+
+// ── Audio (Web Audio API — works offline, no files needed) ────────────────────
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  // Resume if suspended (iOS requires user gesture first)
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playBeep(freq = 880, durationMs = 150) {
+  return new Promise(resolve => {
+    try {
+      const ctx  = getAudioCtx();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + durationMs / 1000);
+      setTimeout(resolve, durationMs + 30);
+    } catch { resolve(); }
+  });
+}
+
+async function playPattern(beeps, repeat, gapSec) {
+  for (let r = 0; r < repeat; r++) {
+    for (let b = 0; b < beeps; b++) {
+      await playBeep(880, 150);
+      if (b < beeps - 1) await sleep(250);
+    }
+    if (r < repeat - 1) await sleep(gapSec * 1000);
+  }
+}
+
+async function playAlarm() {
+  // 4 lower-pitched longer beeps for completion
+  for (let i = 0; i < 4; i++) {
+    await playBeep(440, 500);
+    await sleep(200);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function testBeep() {
+  getAudioCtx(); // unlock audio
+  playBeep(880, 150);
+  showToast('🔔 Beep!');
+}
+
+// ── Timer Logic ───────────────────────────────────────────────────────────────
+function readInput() {
+  const h = parseInt(document.getElementById('inp-h').value) || 0;
+  const m = parseInt(document.getElementById('inp-m').value) || 0;
+  const s = parseInt(document.getElementById('inp-s').value) || 0;
+  return h * 3600 + m * 60 + s;
+}
+
+function timerStart() {
+  // Unlock audio on first user gesture
+  getAudioCtx();
+
+  if (paused) {
+    paused = false;
+    running = true;
+    setStatus('RUNNING');
+    document.getElementById('btn-pause').textContent = '⏸ PAUSE';
+    document.getElementById('clock').className = '';
+    document.getElementById('clock-box').className = 'clock-box running';
+    tick();
+    tickInterval = setInterval(tick, 1000);
+    return;
+  }
+
+  const secs = readInput();
+  if (secs <= 0) { showToast('⚠ Set a time first'); return; }
+
+  totalSeconds = secs;
+  remaining    = secs;
+  triggered    = new Set();
+  running      = true;
+  paused       = false;
+
+  updateDisplay(secs);
+  updateProgress(secs, secs);
+  setStatus('RUNNING');
+
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-pause').disabled = false;
+  document.getElementById('clock').className = '';
+  document.getElementById('clock-box').className = 'clock-box running';
+
+  tick();
+  tickInterval = setInterval(tick, 1000);
+}
+
+function tick() {
+  if (!running || paused) return;
+
+  // Check intervals BEFORE decrementing
+  for (const iv of settings.intervals) {
+    if (remaining <= iv.seconds_left && !triggered.has(iv.seconds_left)) {
+      triggered.add(iv.seconds_left);
+      playPattern(iv.beeps, iv.repeat, iv.gap);
+      showToast(`🔔 ${formatTime(remaining)} remaining`);
+    }
+  }
+
+  if (remaining <= 0) {
+    clearInterval(tickInterval);
+    onComplete();
+    return;
+  }
+
+  remaining--;
+  updateDisplay(remaining);
+  updateProgress(remaining, totalSeconds);
+}
+
+function timerPause() {
+  if (!running) return;
+  if (!paused) {
+    paused = true;
+    running = false;
+    clearInterval(tickInterval);
+    setStatus('PAUSED');
+    document.getElementById('btn-pause').textContent = '▶ RESUME';
+    document.getElementById('clock').className = 'paused';
+    document.getElementById('clock-box').className = 'clock-box paused';
+  } else {
+    timerStart();
+  }
+}
+
+function timerReset() {
+  clearInterval(tickInterval);
+  running = false;
+  paused  = false;
+  remaining = 0;
+  triggered = new Set();
+
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-pause').disabled = true;
+  document.getElementById('btn-pause').textContent = '⏸ PAUSE';
+  document.getElementById('clock').textContent = '00:00:00';
+  document.getElementById('clock').className = '';
+  document.getElementById('clock-box').className = 'clock-box';
+  document.getElementById('progress-bar').style.transform = 'scaleX(0)';
+  setStatus('READY');
+}
+
+function onComplete() {
+  running = false;
+  setStatus('✓ COMPLETE');
+  document.getElementById('clock').textContent = '00:00:00';
+  document.getElementById('clock').className = 'done flash';
+  document.getElementById('clock-box').className = 'clock-box done';
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-pause').disabled = true;
+  document.getElementById('btn-pause').textContent = '⏸ PAUSE';
+  document.getElementById('progress-bar').style.transform = 'scaleX(0)';
+  playAlarm();
+  showToast('✓ TIME\'S UP!');
+
+  // Stop flash after 3 seconds
+  setTimeout(() => {
+    document.getElementById('clock').className = 'done';
+  }, 3000);
+}
+
+// ── Display Helpers ───────────────────────────────────────────────────────────
+function updateDisplay(secs) {
+  document.getElementById('clock').textContent = formatTime(Math.max(secs, 0));
+}
+
+function formatTime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function updateProgress(remaining, total) {
+  const pct = total > 0 ? remaining / total : 0;
+  document.getElementById('progress-bar').style.transform = `scaleX(${pct})`;
+}
+
+function setStatus(txt) {
+  document.getElementById('status').textContent = txt;
+}
+
+// ── Spinner Controls ──────────────────────────────────────────────────────────
+function nudge(field, delta) {
+  const el  = document.getElementById(`inp-${field}`);
+  const max = field === 'h' ? 23 : 59;
+  let val   = (parseInt(el.value) || 0) + delta;
+  if (val < 0)   val = max;
+  if (val > max) val = 0;
+  el.value = pad(val);
+}
+
+// ── Favorites ─────────────────────────────────────────────────────────────────
+function renderFavorites() {
+  const container = document.getElementById('fav-chips');
+  container.innerHTML = '';
+  const sorted = [...settings.favorites].sort((a, b) => a - b);
+  sorted.forEach(secs => {
+    const chip = document.createElement('button');
+    chip.className = 'fav-chip';
+    chip.textContent = fmtFav(secs);
+    chip.onclick = () => loadFav(secs);
+    container.appendChild(chip);
+  });
+}
+
+function fmtFav(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h) return `${h}h${pad(m)}m`;
+  if (m) return s === 0 ? `${m}m` : `${m}m${pad(s)}s`;
+  return `${s}s`;
+}
+
+function loadFav(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  document.getElementById('inp-h').value = pad(h);
+  document.getElementById('inp-m').value = pad(m);
+  document.getElementById('inp-s').value = pad(s);
+}
+
+function favAdd() {
+  const secs = readInput();
+  if (secs <= 0) { showToast('⚠ Set a time first'); return; }
+  if (!settings.favorites.includes(secs)) {
+    settings.favorites.push(secs);
+    saveSettings(settings);
+    renderFavorites();
+    showToast('★ Added to favorites');
+  } else {
+    showToast('Already in favorites');
+  }
+}
+
+function favRemove() {
+  const secs = readInput();
+  const idx  = settings.favorites.indexOf(secs);
+  if (idx !== -1) {
+    settings.favorites.splice(idx, 1);
+    saveSettings(settings);
+    renderFavorites();
+    showToast('Removed from favorites');
+  } else {
+    showToast('Not in favorites');
+  }
+}
+
+// ── Interval Editor ───────────────────────────────────────────────────────────
+function openIntervals() {
+  const container = document.getElementById('interval-rows');
+  container.innerHTML = '';
+  settings.intervals.forEach(iv => addIntervalRow(iv));
+  document.getElementById('modal-intervals').classList.add('open');
+}
+
+function closeIntervals() {
+  document.getElementById('modal-intervals').classList.remove('open');
+}
+
+function addIntervalRow(iv = null) {
+  const row = document.createElement('div');
+  row.className = 'interval-row';
+  const vals = iv
+    ? [iv.seconds_left, iv.beeps, iv.repeat, iv.gap]
+    : [60, 1, 3, 2.0];
+  vals.forEach(v => {
+    const inp = document.createElement('input');
+    inp.type  = 'number';
+    inp.value = v;
+    inp.min   = 0;
+    row.appendChild(inp);
+  });
+  document.getElementById('interval-rows').appendChild(row);
+}
+
+function intervalAddRow() { addIntervalRow(); }
+
+function saveIntervals() {
+  const rows = document.querySelectorAll('#interval-rows .interval-row');
+  const intervals = [];
+  for (const row of rows) {
+    const inputs = row.querySelectorAll('input');
+    const vals   = [...inputs].map(i => parseFloat(i.value));
+    if (vals.some(isNaN)) { showToast('⚠ All fields must be numbers'); return; }
+    intervals.push({
+      seconds_left: parseInt(vals[0]),
+      beeps:        parseInt(vals[1]),
+      repeat:       parseInt(vals[2]),
+      gap:          vals[3],
+    });
+  }
+  settings.intervals = intervals.sort((a, b) => b.seconds_left - a.seconds_left);
+  saveSettings(settings);
+  closeIntervals();
+  showToast('✓ Intervals saved');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── Install Banner (iOS Safari hint) ─────────────────────────────────────────
+function checkInstallBanner() {
+  const isIOS       = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  if (isIOS && !isStandalone) {
+    document.getElementById('install-banner').classList.add('show');
+  }
+}
+
+// ── Service Worker Registration ───────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(err => {
+    console.log('SW registration failed:', err);
+  });
+}
+
+// ── Wake Lock (keep screen on during countdown) ───────────────────────────────
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch {}
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderFavorites();
+checkInstallBanner();
+requestWakeLock();
+
+// Re-request wake lock if page becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+</script>
+</body>
+</html>
