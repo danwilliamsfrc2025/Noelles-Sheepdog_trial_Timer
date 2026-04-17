@@ -254,17 +254,16 @@ function saveSettings(s) { localStorage.setItem('noelle_settings',JSON.stringify
 let settings = loadSettings();
 
 // ── Audio — using embedded WAV via <audio> elements ───────────────────────────
-// iOS Safari plays <audio> elements reliably once user has tapped the page.
 const sndBeep  = document.getElementById('snd-beep');
 const sndAlarm = document.getElementById('snd-alarm');
 
 function unlockAudio() {
-  // Play then immediately pause — this unlocks the audio element on iOS
   sndBeep.play().then(() => {
     sndBeep.pause();
     sndBeep.currentTime = 0;
+    // Also unlock alarm sound
+    sndAlarm.play().then(()=>{ sndAlarm.pause(); sndAlarm.currentTime=0; }).catch(()=>{});
     document.getElementById('audio-unlock').classList.add('hidden');
-    // Play real beep to confirm
     setTimeout(playBeep, 200);
     showToast('🔔 Audio enabled!');
   }).catch(e => {
@@ -274,12 +273,17 @@ function unlockAudio() {
   });
 }
 
+// Clone the audio node each time so rapid beeps never interrupt each other
 function playBeep() {
   return new Promise(resolve => {
     try {
-      sndBeep.currentTime = 0;
-      sndBeep.play().catch(()=>{});
-      setTimeout(resolve, 250);
+      const clone = sndBeep.cloneNode();
+      clone.volume = 1.0;
+      clone.play().catch(()=>{});
+      // Clean up after playing
+      clone.onended = () => { clone.remove(); resolve(); };
+      // Fallback resolve in case onended doesn't fire
+      setTimeout(resolve, 400);
     } catch { resolve(); }
   });
 }
@@ -290,7 +294,7 @@ async function playPattern(beeps, repeat, gapSec) {
   for (let r = 0; r < repeat; r++) {
     for (let b = 0; b < beeps; b++) {
       await playBeep();
-      if (b < beeps-1) await sleep(300);
+      if (b < beeps-1) await sleep(350);
     }
     if (r < repeat-1) await sleep(gapSec * 1000);
   }
@@ -298,8 +302,12 @@ async function playPattern(beeps, repeat, gapSec) {
 
 async function playAlarm() {
   for (let i = 0; i < 4; i++) {
-    try { sndAlarm.currentTime=0; sndAlarm.play().catch(()=>{}); } catch{}
-    await sleep(700);
+    try {
+      const clone = sndAlarm.cloneNode();
+      clone.play().catch(()=>{});
+      clone.onended = () => clone.remove();
+    } catch{}
+    await sleep(800);
   }
 }
 
@@ -471,12 +479,40 @@ if(/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone
 // ── Service Worker ────────────────────────────────────────────────────────────
 if('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
 
-// ── Wake Lock ─────────────────────────────────────────────────────────────────
-async function requestWakeLock() {
-  try { if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch{}
+// ── Screen Keep-Awake ─────────────────────────────────────────────────────────
+// Wake Lock API not supported on iOS Safari — use a silent looping video trick
+// A tiny invisible video playing keeps iOS from sleeping the screen
+let noSleepVideo = null;
+
+function enableNoSleep() {
+  if (noSleepVideo) return;
+  // Create a 1x1 transparent video that loops silently — iOS won't sleep with video playing
+  noSleepVideo = document.createElement('video');
+  noSleepVideo.setAttribute('playsinline', '');
+  noSleepVideo.setAttribute('muted', '');
+  noSleepVideo.setAttribute('loop', '');
+  noSleepVideo.style.cssText = 'position:fixed;top:-1px;left:-1px;width:1px;height:1px;opacity:0;pointer-events:none;';
+  // Tiny valid MP4 (black 1x1 pixel, 1 frame)
+  noSleepVideo.src = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAAGm1kYXQAAAAA//v/xQAAA';
+  document.body.appendChild(noSleepVideo);
+  noSleepVideo.play().catch(()=>{});
 }
+
+// Also try Wake Lock API for browsers that support it
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      await navigator.wakeLock.request('screen');
+    }
+  } catch {}
+  // Always also enable the video trick as a fallback
+  enableNoSleep();
+}
+
 requestWakeLock();
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') requestWakeLock(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 renderFavorites();
