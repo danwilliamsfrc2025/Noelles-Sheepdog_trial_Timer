@@ -288,21 +288,21 @@ function playBeep() {
   });
 }
 
-// Schedule every individual beep as a precise setTimeout
-// Async/await patterns get killed by iOS after a few seconds in background
+// Schedule every individual beep as precise setTimeouts
+// All beeps pre-scheduled at once — iOS cannot throttle individual setTimeouts
 function playPattern(beeps, repeat, gap) {
   let t = 0;
   for (let r = 0; r < repeat; r++) {
     for (let b = 0; b < beeps; b++) {
       const delay = t;
-      setTimeout(() => { if (running || paused) playBeep(); }, delay);
-      t += 400; // 400ms between beeps within a group
+      setTimeout(() => playBeep(), delay);  // no guard — always play once scheduled
+      t += 400;
     }
-    t += gap * 1000; // gap between repeats
+    t += gap * 1000;
   }
 }
 
-async function playAlarm() {
+function playAlarm() {
   for (let i = 0; i < 4; i++) {
     setTimeout(() => {
       try {
@@ -324,15 +324,6 @@ function readInput() {
 }
 
 function timerStart() {
-  if (paused) {
-    paused=false; running=true;
-    setStatus('RUNNING');
-    document.getElementById('btn-pause').textContent='⏸ PAUSE';
-    document.getElementById('clock').className='';
-    document.getElementById('clock-box').className='clock-box running';
-    clearInterval(tickInterval); // clear any stale interval
-    tickInterval=setInterval(tick,1000); return;
-  }
   const secs=readInput();
   if (secs<=0) { showToast('⚠ Set a time first'); return; }
   totalSeconds=secs; remaining=secs; triggered=new Set();
@@ -340,40 +331,53 @@ function timerStart() {
   updateDisplay(secs); updateProgress(secs,secs); setStatus('RUNNING');
   document.getElementById('btn-start').disabled=true;
   document.getElementById('btn-pause').disabled=false;
+  document.getElementById('btn-pause').textContent='⏸ PAUSE';
   document.getElementById('clock').className='';
   document.getElementById('clock-box').className='clock-box running';
-  clearInterval(tickInterval); // clear any stale interval
+  clearInterval(tickInterval);
+  tickInterval=setInterval(tick,1000);
+}
+
+function timerResume() {
+  paused=false; running=true;
+  setStatus('RUNNING');
+  document.getElementById('btn-pause').textContent='⏸ PAUSE';
+  document.getElementById('clock').className='';
+  document.getElementById('clock-box').className='clock-box running';
+  clearInterval(tickInterval);
   tickInterval=setInterval(tick,1000);
 }
 
 function tick() {
-  if (!running||paused) return;
+  if (!running || paused) return;
 
-  // Check for exact second match — prevents cascading triggers
   for (const iv of settings.intervals) {
     if (remaining === iv.seconds_left && !triggered.has(iv.seconds_left)) {
       triggered.add(iv.seconds_left);
-      // Fire pattern in background — don't await so timer keeps running
       playPattern(iv.beeps, iv.repeat, iv.gap);
       showToast('🔔 ' + formatTime(remaining) + ' remaining');
     }
   }
 
-  if (remaining<=0) { clearInterval(tickInterval); onComplete(); return; }
+  if (remaining <= 0) { clearInterval(tickInterval); onComplete(); return; }
   remaining--;
   updateDisplay(remaining);
-  updateProgress(remaining,totalSeconds);
+  updateProgress(remaining, totalSeconds);
 }
 
 function timerPause() {
-  if (!running) return;
-  if (!paused) {
-    paused=true; running=false; clearInterval(tickInterval);
+  if (paused) {
+    // Currently paused — RESUME
+    timerResume();
+  } else if (running) {
+    // Currently running — PAUSE
+    paused=true; running=false;
+    clearInterval(tickInterval);
     setStatus('PAUSED');
     document.getElementById('btn-pause').textContent='▶ RESUME';
     document.getElementById('clock').className='paused';
     document.getElementById('clock-box').className='clock-box paused';
-  } else { timerStart(); }
+  }
 }
 
 function timerReset() {
