@@ -260,19 +260,32 @@ let ctx = null;
 function unlockAudio() {
   try {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // Play a silent buffer to unlock — required by iOS
+
+    // Play a silent buffer — this is the iOS unlock gesture trick
     const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
     src.start(0);
-    ctx.resume().then(() => {
-      document.getElementById('audio-unlock').classList.add('hidden');
-      // Confirm with a real beep
-      scheduleBeepAt(ctx.currentTime + 0.1, 880, 0.2);
+
+    // Don't wait on resume() promise — it can hang on iOS
+    // Just attempt it and proceed regardless
+    if (ctx.resume) ctx.resume().catch(() => {});
+
+    // Hide overlay and play confirmation beep immediately
+    document.getElementById('audio-unlock').classList.add('hidden');
+    // Small delay to let context settle before first real beep
+    setTimeout(() => {
+      scheduleBeepAt(ctx.currentTime + 0.05, 880, 0.2);
       showToast('🔔 Audio enabled!');
-    });
+    }, 100);
+
   } catch(e) {
+    console.log('Audio error:', e);
+    document.getElementById('audio-unlock').classList.add('hidden');
+    showToast('⚠ Audio error: ' + e.message);
+  }
+}
     document.getElementById('audio-unlock').classList.add('hidden');
     showToast('⚠ Audio error: ' + e.message);
   }
