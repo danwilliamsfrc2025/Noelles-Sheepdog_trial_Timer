@@ -286,10 +286,6 @@ function unlockAudio() {
     showToast('⚠ Audio error: ' + e.message);
   }
 }
-    document.getElementById('audio-unlock').classList.add('hidden');
-    showToast('⚠ Audio error: ' + e.message);
-  }
-}
 
 // Synthesize a beep directly on the audio clock — never throttled by iOS
 function scheduleBeepAt(when, freq, dur) {
@@ -346,8 +342,6 @@ function readInput() {
          (parseInt(document.getElementById('inp-m').value)||0)*60  +
          (parseInt(document.getElementById('inp-s').value)||0);
 }
-
-let tickTimeout = null;
 
 function timerStart() {
   const secs = readInput();
