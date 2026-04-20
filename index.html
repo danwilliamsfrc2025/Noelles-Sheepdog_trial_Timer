@@ -288,17 +288,30 @@ function playBeep() {
   });
 }
 
-// Schedule every individual beep as precise setTimeouts
-// All beeps pre-scheduled at once — iOS cannot throttle individual setTimeouts
+// Pre-schedule all beeps using absolute Date.now() timestamps
+// Completely independent of the tick loop — iOS cannot interrupt these
 function playPattern(beeps, repeat, gap) {
-  let t = 0;
+  const scheduleBeep = (delayMs) => {
+    const fireAt = Date.now() + delayMs;
+    const drift  = () => {
+      const now  = Date.now();
+      const wait = fireAt - now;
+      if (wait > 20) {
+        setTimeout(drift, Math.max(0, wait - 10));
+      } else {
+        playBeep();
+      }
+    };
+    setTimeout(drift, Math.max(0, delayMs - 10));
+  };
+
+  let t = 50; // small initial offset so first beep isn't instant
   for (let r = 0; r < repeat; r++) {
     for (let b = 0; b < beeps; b++) {
-      const delay = t;
-      setTimeout(() => playBeep(), delay);  // no guard — always play once scheduled
-      t += 400;
+      scheduleBeep(t);
+      t += 420;
     }
-    t += gap * 1000;
+    t += (gap * 1000);
   }
 }
 
