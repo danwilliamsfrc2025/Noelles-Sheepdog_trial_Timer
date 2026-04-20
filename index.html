@@ -327,7 +327,7 @@ function timerStart() {
     document.getElementById('btn-pause').textContent='⏸ PAUSE';
     document.getElementById('clock').className='';
     document.getElementById('clock-box').className='clock-box running';
-    tick(); tickInterval=setInterval(tick,1000); return;
+    tickInterval=setInterval(tick,1000); return;
   }
   const secs=readInput();
   if (secs<=0) { showToast('⚠ Set a time first'); return; }
@@ -338,18 +338,23 @@ function timerStart() {
   document.getElementById('btn-pause').disabled=false;
   document.getElementById('clock').className='';
   document.getElementById('clock-box').className='clock-box running';
-  tick(); tickInterval=setInterval(tick,1000);
+  // Start interval — first tick fires after 1 second
+  tickInterval=setInterval(tick,1000);
 }
 
 function tick() {
   if (!running||paused) return;
+
+  // Check for exact second match — prevents cascading triggers
   for (const iv of settings.intervals) {
-    if (remaining<=iv.seconds_left && !triggered.has(iv.seconds_left)) {
+    if (remaining === iv.seconds_left && !triggered.has(iv.seconds_left)) {
       triggered.add(iv.seconds_left);
-      playPattern(iv.beeps,iv.repeat,iv.gap);
-      showToast('🔔 '+formatTime(remaining)+' remaining');
+      // Fire pattern in background — don't await so timer keeps running
+      playPattern(iv.beeps, iv.repeat, iv.gap);
+      showToast('🔔 ' + formatTime(remaining) + ' remaining');
     }
   }
+
   if (remaining<=0) { clearInterval(tickInterval); onComplete(); return; }
   remaining--;
   updateDisplay(remaining);
