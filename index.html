@@ -288,26 +288,29 @@ function playBeep() {
   });
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function playPattern(beeps, repeat, gapSec) {
+// Schedule every individual beep as a precise setTimeout
+// Async/await patterns get killed by iOS after a few seconds in background
+function playPattern(beeps, repeat, gap) {
+  let t = 0;
   for (let r = 0; r < repeat; r++) {
     for (let b = 0; b < beeps; b++) {
-      await playBeep();
-      if (b < beeps-1) await sleep(350);
+      const delay = t;
+      setTimeout(() => { if (running || paused) playBeep(); }, delay);
+      t += 400; // 400ms between beeps within a group
     }
-    if (r < repeat-1) await sleep(gapSec * 1000);
+    t += gap * 1000; // gap between repeats
   }
 }
 
 async function playAlarm() {
   for (let i = 0; i < 4; i++) {
-    try {
-      const clone = sndAlarm.cloneNode();
-      clone.play().catch(()=>{});
-      clone.onended = () => clone.remove();
-    } catch{}
-    await sleep(800);
+    setTimeout(() => {
+      try {
+        const clone = sndAlarm.cloneNode();
+        clone.play().catch(()=>{});
+        clone.onended = () => clone.remove();
+      } catch{}
+    }, i * 800);
   }
 }
 
@@ -327,6 +330,7 @@ function timerStart() {
     document.getElementById('btn-pause').textContent='⏸ PAUSE';
     document.getElementById('clock').className='';
     document.getElementById('clock-box').className='clock-box running';
+    clearInterval(tickInterval); // clear any stale interval
     tickInterval=setInterval(tick,1000); return;
   }
   const secs=readInput();
@@ -338,7 +342,7 @@ function timerStart() {
   document.getElementById('btn-pause').disabled=false;
   document.getElementById('clock').className='';
   document.getElementById('clock-box').className='clock-box running';
-  // Start interval — first tick fires after 1 second
+  clearInterval(tickInterval); // clear any stale interval
   tickInterval=setInterval(tick,1000);
 }
 
